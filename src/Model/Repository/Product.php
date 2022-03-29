@@ -8,6 +8,15 @@ use Model\Entity;
 
 class Product
 {
+    private $identityMap;
+    public function __construct(IdentityMap $identityMap)
+    {
+        /**
+         * $this->identityMap = код загрузки состояния $identityMap из глобального state'a или из session (по принципу как реализован Basket в это проекте)
+         */
+
+    }
+
     /**
      * Поиск продуктов по массиву id
      *
@@ -21,8 +30,26 @@ class Product
         }
 
         $productList = [];
-        foreach ($this->getDataFromSource(['id' => $ids]) as $item) {
-            $productList[] = new Entity\Product($item['id'], $item['name'], $item['price']);
+
+//id, которые на найдены в identity map
+        $idsNotInCache = [];
+
+        foreach ($ids as $id){
+            $product=$this->identityMap->get('Product',$id);
+
+// если продукт не найден в identity map, то его id запоминаем и потом сделаем запрос в БД
+            if(!$product){
+                $idsNotInCache[]=$id;
+            } else {
+                $productList[]=$product;
+            }
+        }
+
+// недостающие id загружаем из БД и помещаем их Identity Map
+        foreach ($this->getDataFromSource(['id' => $idsNotInCache]) as $item) {
+            $product = new Entity\Product($item['id'], $item['name'], $item['price']);
+            $productList[]=$product;
+            $this->identityMap->add($product);
         }
 
         return $productList;
@@ -36,8 +63,12 @@ class Product
     public function fetchAll(): array
     {
         $productList = [];
+// при загрузке всех данных происходит только обновление identity map (который потом можно использованть в запросе по ids)
+// здесь у нас нет критерия (набор уникальных полей) по которым мы могли бы принять решение загружать данные из identity, а не из БД
         foreach ($this->getDataFromSource() as $item) {
-            $productList[] = new Entity\Product($item['id'], $item['name'], $item['price']);
+            $product = new Entity\Product($item['id'], $item['name'], $item['price']);
+            $productList[]=$product;
+            $this->identityMap->add($product);
         }
 
         return $productList;
